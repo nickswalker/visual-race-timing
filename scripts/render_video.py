@@ -120,8 +120,10 @@ def run(args):
                 # Retarget the frame rate to match the desired output frame rate
                 current_frame_timecode = Timecode(frame_rate, start_seconds=timecode.float)
                 next_frame_timecode = loader.get_current_time()
-                while next_frame_timecode and next_frame_timecode.float > (current_frame_timecode + 1).float:
+                while next_frame_timecode and next_frame_timecode.to_realtime(as_float=True) > (
+                        current_frame_timecode + 1).to_realtime(as_float=True):
                     # We need to duplicate frames to match the frame rate
+                    logger.info(f"Duplicating frame at {current_frame_timecode} to match frame rate")
                     duplicated_frames += 1
                     ffmpeg_process.stdin.write(out.tobytes())
                     current_frame_timecode += 1
