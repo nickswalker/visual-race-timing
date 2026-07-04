@@ -10,7 +10,7 @@ from visual_race_timing.loader import ImageLoader, VideoLoader
 
 
 class MediaPlayer:
-    def __init__(self, paused=False):
+    def __init__(self, paused=False, crop=None):
         self.click_delegate = lambda frame, frame_number, mouse_pt, flags: None
         self.annotation_updated = lambda annotation_id, annotation, frame_number: None
         self.pre_display = lambda frame, frame_number: frame
@@ -29,6 +29,7 @@ class MediaPlayer:
         self.start_point = None
         self.end_point = None
         self.window_name = 'Edit Race Annotations'
+        self.crop = crop
 
     def get_last_timecode(self) -> Timecode:
         """ Return the timecode of the last frame displayed. Returns None if no frame has been displayed. """
@@ -53,6 +54,10 @@ class MediaPlayer:
 
         self.draw_active_annotation(frame)
         render_timecode(current_timecode, frame, frame)
+        if self.crop:
+            # Crop the frame if crop is enabled
+            # FIXME: Need to update the pre-display API to accept information about the crop
+            frame = frame[self.crop[1]:self.crop[1] + self.crop[3], self.crop[0]:self.crop[0] + self.crop[2]]
         cv2.imshow(self.window_name, self.pre_display(frame, current_timecode.frames))
 
     def mouse_callback(self, event, x, y, flags, param):
@@ -83,7 +88,12 @@ class MediaPlayer:
             frame = self._last_frame_img.copy()
             cv2.rectangle(frame, self.start_point, self.end_point, (0, 255, 0), 2)
             render_timecode(self.get_last_timecode(), frame, frame)
-            cv2.imshow(self.window_name, frame)
+            if self.crop:
+                # Crop the frame if crop is enabled
+                cv2.imshow(frame[self.crop[1]:self.crop[1] + self.crop[3], self.crop[0]:self.crop[0] + self.crop[2]],
+                           frame)
+            else:
+                cv2.imshow(self.window_name, frame)
             cv2.waitKey(1)
 
             try:
@@ -137,8 +147,8 @@ class MediaPlayer:
 
 
 class VideoPlayer(MediaPlayer):
-    def __init__(self, sources, paused=False):
-        super().__init__(paused)
+    def __init__(self, sources, paused=False, **kwargs):
+        super().__init__(paused, **kwargs)
         self.loader = VideoLoader(sources)
         self._last_timecode = None
 
@@ -234,8 +244,8 @@ class FrameBuffer:
 
 
 class BufferedVideoPlayer(VideoPlayer):
-    def __init__(self, sources, paused=False, buffer_seconds=4):
-        super().__init__(sources, paused)
+    def __init__(self, sources, paused=False, buffer_seconds=4, **kwargs):
+        super().__init__(sources, paused, **kwargs)
 
         # Calculate buffer size based on video fps
         fps = float(self.loader.get_fps()) if hasattr(self.loader, 'get_fps') else 30
@@ -261,9 +271,6 @@ class BufferedVideoPlayer(VideoPlayer):
         return self.loader.seek_timecode(timecode)
 
     def seek_frame(self, frame_number: int) -> bool:
-        # Check buffer first for backward seeks
-        current_frame = self.loader.get_current_frame()
-
         if self.frame_buffer.has_frame(frame_number):
             return True
 
@@ -327,8 +334,8 @@ class DisplayWindow(threading.Thread):
 
 
 class PhotoPlayer(MediaPlayer):
-    def __init__(self, frame_directory, paused=False):
-        self.loader = ImageLoader(frame_directory)
+    def __init__(self, frame_directory, paused=False, **kwargs):
+        self.loader = ImageLoader(frame_directory, **kwargs)
         super().__init__(paused)
         self.index = 0
         self._last_frame_timecode = None
